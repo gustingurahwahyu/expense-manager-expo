@@ -3,6 +3,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { Link, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -14,16 +15,21 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useAuth } from "../context/AuthContext";
+import { addTransaction } from "../services/transactionService";
 
-export default function Addexpense() {
+export default function AddExpense() {
   const router = useRouter();
+  const { user } = useAuth();
 
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [date, setDate] = useState(new Date());
+  const [payment, setPayment] = useState("");
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const categories = [
     "Food",
@@ -31,20 +37,49 @@ export default function Addexpense() {
     "Shopping",
     "Entertainment",
     "Bills",
-    "Salary",
     "Other",
   ];
 
-  function handleSave() {
-    // Simple save action - replace with real persistence
+  const paymentMethods = [
+    "Cash",
+    "Debit Card",
+    "Credit Card",
+    "E-Wallet",
+    "Bank Transfer",
+  ];
+
+  async function handleSave() {
+    if (!user) {
+      Alert.alert("Error", "Please login first");
+      return;
+    }
+
+    if (!amount || !category) {
+      Alert.alert("Error", "Please fill in amount and category");
+      return;
+    }
+
     const payload = {
-      amount: parseFloat(amount) || 0,
+      userId: user.uid,
+      type: "expense" as const,
+      amount: parseFloat(amount),
       category,
       notes,
-      date: date.toISOString(),
+      date,
+      payment: payment || "Cash",
     };
-    console.log("Saving transaction:", payload);
-    router.back();
+
+    setLoading(true);
+    try {
+      await addTransaction(payload);
+      Alert.alert("Success", "Expense added successfully");
+      router.back();
+    } catch (error) {
+      console.error("Error saving expense:", error);
+      Alert.alert("Error", "Failed to save expense");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function onChangeDate(_: any, selectedDate?: Date) {
@@ -65,15 +100,12 @@ export default function Addexpense() {
         <View className="flex-row items-center justify-between mb-6">
           <Link href=".." asChild>
             <TouchableOpacity className="p-2">
-              <Ionicons name="arrow-back" size={28} color="#16a34a" />
+              <Ionicons name="arrow-back" size={28} color="#ef4444" />
             </TouchableOpacity>
           </Link>
 
-          <Text className="text-2xl font-bold text-green-600">
-            Tambah Pengeluaran
-          </Text>
+          <Text className="text-2xl font-bold text-red-600">Add Expense</Text>
 
-          {/* placeholder agar header rata */}
           <View style={{ width: 28 }} />
         </View>
 
@@ -82,7 +114,7 @@ export default function Addexpense() {
           <Text className="mb-2 text-gray-600">Amount</Text>
           <TextInput
             keyboardType="numeric"
-            placeholder="Rp 0"
+            placeholder="0"
             value={amount}
             onChangeText={setAmount}
             className="p-3 mb-4 text-gray-700 border border-gray-200 rounded-lg"
@@ -94,21 +126,31 @@ export default function Addexpense() {
             className="p-3 mb-4 border border-gray-200 rounded-lg"
           >
             <Text className="text-gray-700">
-              {category ?? "Pilih kategori"}
+              {category ?? "Select category"}
             </Text>
           </TouchableOpacity>
+
+          <Text className="mb-2 text-gray-600">Payment Method</Text>
+          <TextInput
+            placeholder="Cash, Card, etc."
+            value={payment}
+            onChangeText={setPayment}
+            className="p-3 mb-4 text-gray-700 border border-gray-200 rounded-lg"
+          />
 
           <Text className="mb-2 text-gray-600">Date</Text>
           <TouchableOpacity
             onPress={() => setShowDatePicker(true)}
             className="p-3 mb-4 border border-gray-200 rounded-lg"
           >
-            <Text className="text-gray-700">{date.toLocaleDateString()}</Text>
+            <Text className="text-gray-700">
+              {date.toLocaleDateString("id-ID")}
+            </Text>
           </TouchableOpacity>
 
           <Text className="mb-2 text-gray-600">Notes</Text>
           <TextInput
-            placeholder="Catatan..."
+            placeholder="Add notes..."
             multiline
             numberOfLines={4}
             value={notes}
@@ -118,14 +160,19 @@ export default function Addexpense() {
 
           <TouchableOpacity
             onPress={handleSave}
-            className="py-4 mb-3 bg-green-600 rounded-2xl"
+            disabled={loading}
+            className={`py-4 mb-3 bg-red-600 rounded-2xl ${
+              loading ? "opacity-50" : ""
+            }`}
           >
-            <Text className="font-semibold text-center text-white">Save</Text>
+            <Text className="font-semibold text-center text-white">
+              {loading ? "Saving..." : "Save"}
+            </Text>
           </TouchableOpacity>
 
           <Link href=".." asChild>
-            <TouchableOpacity className="py-3 border border-green-600 rounded-2xl">
-              <Text className="font-semibold text-center text-green-600">
+            <TouchableOpacity className="py-3 border border-red-600 rounded-2xl">
+              <Text className="font-semibold text-center text-red-600">
                 Cancel
               </Text>
             </TouchableOpacity>
@@ -142,7 +189,7 @@ export default function Addexpense() {
       >
         <View className="justify-end flex-1">
           <View className="p-4 bg-white shadow rounded-t-2xl">
-            <Text className="mb-3 text-lg font-semibold">Pilih Kategori</Text>
+            <Text className="mb-3 text-lg font-semibold">Select Category</Text>
             <FlatList
               data={categories}
               keyExtractor={(item) => item}

@@ -3,6 +3,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { Link, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -14,29 +15,56 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useAuth } from "../context/AuthContext";
+import { addTransaction } from "../services/transactionService";
 
 export default function AddIncome() {
   const router = useRouter();
+  const { user } = useAuth();
 
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [date, setDate] = useState(new Date());
+  const [payment, setPayment] = useState("");
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const categories = ["Salary", "Bonus", "Investment", "Gift", "Other"];
 
-  function handleSave() {
+  async function handleSave() {
+    if (!user) {
+      Alert.alert("Error", "Please login first");
+      return;
+    }
+
+    if (!amount || !category) {
+      Alert.alert("Error", "Please fill in amount and category");
+      return;
+    }
+
     const payload = {
-      amount: parseFloat(amount) || 0,
+      userId: user.uid,
+      type: "income" as const,
+      amount: parseFloat(amount),
       category,
       notes,
-      date: date.toISOString(),
-      type: "income",
+      date,
+      payment: payment || "Bank Transfer",
     };
-    console.log("Saving income:", payload);
-    router.back();
+
+    setLoading(true);
+    try {
+      await addTransaction(payload);
+      Alert.alert("Success", "Income added successfully");
+      router.back();
+    } catch (error) {
+      console.error("Error saving income:", error);
+      Alert.alert("Error", "Failed to save income");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function onChangeDate(_: any, selectedDate?: Date) {
@@ -61,9 +89,7 @@ export default function AddIncome() {
             </TouchableOpacity>
           </Link>
 
-          <Text className="text-2xl font-bold text-green-600">
-            Tambah Pemasukan
-          </Text>
+          <Text className="text-2xl font-bold text-green-600">Add Income</Text>
 
           <View style={{ width: 28 }} />
         </View>
@@ -73,7 +99,7 @@ export default function AddIncome() {
           <Text className="mb-2 text-gray-600">Amount</Text>
           <TextInput
             keyboardType="numeric"
-            placeholder="Rp 0"
+            placeholder="0"
             value={amount}
             onChangeText={setAmount}
             className="p-3 mb-4 text-gray-700 border border-gray-200 rounded-lg"
@@ -85,21 +111,31 @@ export default function AddIncome() {
             className="p-3 mb-4 border border-gray-200 rounded-lg"
           >
             <Text className="text-gray-700">
-              {category ?? "Pilih kategori"}
+              {category ?? "Select category"}
             </Text>
           </TouchableOpacity>
+
+          <Text className="mb-2 text-gray-600">Payment Method</Text>
+          <TextInput
+            placeholder="Bank Transfer, Cash, etc."
+            value={payment}
+            onChangeText={setPayment}
+            className="p-3 mb-4 text-gray-700 border border-gray-200 rounded-lg"
+          />
 
           <Text className="mb-2 text-gray-600">Date</Text>
           <TouchableOpacity
             onPress={() => setShowDatePicker(true)}
             className="p-3 mb-4 border border-gray-200 rounded-lg"
           >
-            <Text className="text-gray-700">{date.toLocaleDateString()}</Text>
+            <Text className="text-gray-700">
+              {date.toLocaleDateString("id-ID")}
+            </Text>
           </TouchableOpacity>
 
           <Text className="mb-2 text-gray-600">Notes</Text>
           <TextInput
-            placeholder="Catatan..."
+            placeholder="Add notes..."
             multiline
             numberOfLines={4}
             value={notes}
@@ -109,9 +145,14 @@ export default function AddIncome() {
 
           <TouchableOpacity
             onPress={handleSave}
-            className="py-4 mb-3 bg-green-600 rounded-2xl"
+            disabled={loading}
+            className={`py-4 mb-3 bg-green-600 rounded-2xl ${
+              loading ? "opacity-50" : ""
+            }`}
           >
-            <Text className="font-semibold text-center text-white">Save</Text>
+            <Text className="font-semibold text-center text-white">
+              {loading ? "Saving..." : "Save"}
+            </Text>
           </TouchableOpacity>
 
           <Link href=".." asChild>
@@ -133,7 +174,7 @@ export default function AddIncome() {
       >
         <View className="justify-end flex-1">
           <View className="p-4 bg-white shadow rounded-t-2xl">
-            <Text className="mb-3 text-lg font-semibold">Pilih Kategori</Text>
+            <Text className="mb-3 text-lg font-semibold">Select Category</Text>
             <FlatList
               data={categories}
               keyExtractor={(item) => item}
